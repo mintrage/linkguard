@@ -18,8 +18,7 @@ type linkServer struct {
 
 // 1. Реализация метода CreateLink
 func (s *linkServer) CreateLink(ctx context.Context, req *pb.CreateLinkRequest) (*pb.CreateLinkResponse, error) {
-	// Senior tip: В gRPC лучше читать поля через встроенные геттеры (Get...),
-	// так как они безопасно обрабатывают nil-значения.
+
 	fmt.Printf("Пришел запрос на сокращение: %s\n", req.GetOriginalUrl())
 
 	// Пока БД нет, делаем хардкод-заглушку (mock)
@@ -30,14 +29,7 @@ func (s *linkServer) CreateLink(ctx context.Context, req *pb.CreateLinkRequest) 
 	}, nil
 }
 
-// ------------------------------------------------------------------
-// ТВОЯ ЗАДАЧА: Написать метод GetOriginalLink
-// Подсказка: он должен принимать req *pb.GetOriginalLinkRequest
-// и возвращать (*pb.GetOriginalLinkResponse, error)
-// Внутри пока просто выведи в консоль запрошенный короткий код
-// и верни захардкоженный длинный URL (например, "https://google.com").
-// ------------------------------------------------------------------
-
+// 2. Реализация метода GetOriginalLink
 func (s *linkServer) GetOriginalLink(ctx context.Context, req *pb.GetOriginalLinkRequest) (*pb.GetOriginalLinkResponse, error) {
 	fmt.Printf("Запрошенный короткий код: %s\n", req.GetShortLink())
 
