@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package shortener;
+
+option go_package = "./proto";
+
+service LinkService {
+    rpc CreateLink(CreateLinkRequest) returns (CreateLinkResponse) {}
+    rpc GetOriginalLink(GetOriginalLinkRequest) returns (GetOriginalLinkResponse) {}
+}
+
+message CreateLinkRequest {
+  string original_url = 1;
+}
+
+message CreateLinkResponse {
+  string short_link = 1;
+}
+
+message GetOriginalLinkRequest {
+  string short_link = 1;
+}
+
+message GetOriginalLinkResponse {
+  string original_url = 1;
+}
