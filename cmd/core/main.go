@@ -7,6 +7,7 @@ import (
 	"net"
 
 	pb "github.com/mintrage/linkguard/proto" // Импортируем наш сгенерированный код
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection" // Понадобится для тестирования
 )
@@ -14,6 +15,7 @@ import (
 // linkServer - наша структура, которая реализует интерфейс из proto-файла
 type linkServer struct {
 	pb.UnimplementedLinkServiceServer // Обязательное встраивание для обратной совместимости
+	rdb                               *redis.Client
 }
 
 // 1. Реализация метода CreateLink
@@ -41,6 +43,17 @@ func (s *linkServer) GetOriginalLink(ctx context.Context, req *pb.GetOriginalLin
 }
 
 func main() {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Fatalf("🚨 Ошибка подключения к Redis: %v. Проверь, запущен ли Docker контейнер!", err)
+	}
+	log.Println("✅ Успешно подключились к Redis!")
+
 	// 1. Открываем TCP-порт (50051 - стандартный порт для gRPC)
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
@@ -51,7 +64,9 @@ func main() {
 	grpcServer := grpc.NewServer()
 
 	// 3. Регистрируем нашу реализацию сервера в gRPC
-	pb.RegisterLinkServiceServer(grpcServer, &linkServer{})
+	pb.RegisterLinkServiceServer(grpcServer, &linkServer{
+		rdb: rdb,
+	})
 
 	// 4. Включаем рефлексию (чтобы мы могли тестировать сервер из консоли)
 	reflection.Register(grpcServer)
