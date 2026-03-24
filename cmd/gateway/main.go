@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	pb "github.com/mintrage/linkguard/proto"
 
@@ -62,6 +63,32 @@ func main() {
 			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError)
 			return
 		}
+
+	})
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "Только GET запросы", http.StatusMethodNotAllowed)
+			return
+		}
+		shortCode := strings.TrimPrefix(r.URL.Path, "/")
+		if shortCode == "" {
+			http.Error(w, "Код не указан", http.StatusBadRequest)
+			return
+		}
+
+		req := &pb.GetOriginalLinkRequest{
+			ShortLink: shortCode,
+		}
+
+		resp, err := grpcClient.GetOriginalLink(r.Context(), req)
+
+		if err != nil {
+			http.Error(w, "Ссылка не найдена", http.StatusNotFound)
+			return
+		}
+
+		http.Redirect(w, r, resp.GetOriginalUrl(), http.StatusFound)
 
 	})
 
