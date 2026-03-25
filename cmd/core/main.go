@@ -6,9 +6,13 @@ import (
 	"log"
 	"math/rand"
 	"net"
+	"net/http"
 	"time"
 
 	pb "github.com/mintrage/linkguard/proto" // Импортируем наш сгенерированный код
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -21,6 +25,17 @@ type linkServer struct {
 	pb.UnimplementedLinkServiceServer // Обязательное встраивание для обратной совместимости
 	rdb                               *redis.Client
 }
+
+var (
+	linksCreated = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "linkguard_created_total",
+		Help: "Общее количество созданных коротких ссылок",
+	})
+	redirectsTotal = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "linkguard_redirects_total",
+		Help: "Количество попыток перехода по ссылкам",
+	}, []string{"status"})
+)
 
 // 1. Реализация метода CreateLink
 func (s *linkServer) CreateLink(ctx context.Context, req *pb.CreateLinkRequest) (*pb.CreateLinkResponse, error) {
@@ -37,6 +52,7 @@ func (s *linkServer) CreateLink(ctx context.Context, req *pb.CreateLinkRequest) 
 	}
 
 	fmt.Printf("✅ Создана ссылка: %s -> %s\n", shortCode, originalURL)
+	linksCreated.Inc()
 
 	return &pb.CreateLinkResponse{
 		ShortLink: shortCode,
@@ -53,6 +69,7 @@ func (s *linkServer) GetOriginalLink(ctx context.Context, req *pb.GetOriginalLin
 	fmt.Printf("Запрошенный короткий код: %s\n", shortCode)
 	originalURL, err := s.rdb.Get(ctx, shortCode).Result()
 	if err == redis.Nil {
+		redirectsTotal.WithLabelValues("miss").Inc()
 		return nil, status.Error(codes.NotFound, "Ссылка не найдена")
 	} else if err != nil {
 		log.Printf("Ошибка чтения из Redis: %v", err)
@@ -60,6 +77,7 @@ func (s *linkServer) GetOriginalLink(ctx context.Context, req *pb.GetOriginalLin
 	}
 
 	fmt.Printf("🔍 Переход по ссылке: %s -> %s\n", shortCode, originalURL)
+	redirectsTotal.WithLabelValues("hit").Inc()
 
 	return &pb.GetOriginalLinkResponse{
 		OriginalUrl: originalURL,
@@ -89,6 +107,16 @@ func main() {
 		log.Fatalf("🚨 Ошибка подключения к Redis: %v. Проверь, запущен ли Docker контейнер!", err)
 	}
 	log.Println("✅ Успешно подключились к Redis!")
+
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		log.Println("📊 Prometheus метрики доступны на http://localhost:2112/metrics")
+		err := http.ListenAndServe(":2112", nil)
+		if err != nil {
+			log.Fatalf("⚠️ Ошибка запуска сервера метрик: %v", err)
+		}
+
+	}()
 
 	// 1. Открываем TCP-порт (50051 - стандартный порт для gRPC)
 	lis, err := net.Listen("tcp", ":50051")
