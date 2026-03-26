@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	pb "github.com/mintrage/linkguard/proto"
 
+	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -17,6 +20,17 @@ type CreateRequest struct {
 }
 
 func main() {
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+	})
+	if err := rdb.Ping(context.Background()).Err(); err != nil {
+		log.Fatalf("🚨 Ошибка подключения к Redis: %v. Проверь, запущен ли Docker контейнер!", err)
+		return
+	}
+	log.Println("✅ Успешно подключились к Redis!")
+
 	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("Не удалось подключиться к gRPC серверу: %v", err)
@@ -28,6 +42,19 @@ func main() {
 	http.HandleFunc("/create", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "Только POST запросы", http.StatusMethodNotAllowed)
+			return
+		}
+
+		userIP := strings.Split(r.RemoteAddr, ":")[0]
+		key := "rate_limit:" + userIP
+		count, err := rdb.Incr(r.Context(), key).Result()
+		if err != nil {
+			log.Printf("Ошибка Rate Limiter: %v", err)
+		}
+		if count == 1 {
+			rdb.Expire(r.Context(), key, time.Minute).Err()
+		} else if count > 5 {
+			http.Error(w, "Слишком много запросов", http.StatusTooManyRequests)
 			return
 		}
 
@@ -63,7 +90,6 @@ func main() {
 			http.Error(w, "Ошибка при формировании ответа", http.StatusInternalServerError)
 			return
 		}
-
 	})
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
