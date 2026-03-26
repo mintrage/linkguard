@@ -5,4 +5,4 @@ scrape_configs:
   - job_name: 'linkguard-core'
     static_configs:
       # Обращаемся к localhost твоего компьютера изнутри Docker-контейнера
-      - targets: ['host.docker.internal:2112']
+      - targets: ['core:2112']
