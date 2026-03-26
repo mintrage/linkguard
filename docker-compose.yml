@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:alpine
+  prometheus:
+    image: prom/prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+
+  core:
+    build: 
+      context: .
+      args:
+        APP_PATH: cmd/core/main.go
+    ports:
+      - "50051:50051"
+      - "2112:2112"
+    environment:
+      - REDIS_ADDR=redis:6379
+    depends_on:
+      - redis
+
+  gateway:
+    build:
+      context: .
+      args:
+        APP_PATH: cmd/gateway/main.go # Передаем путь к шлюзу!
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_ADDR=redis:6379
+      - CORE_ADDR=core:50051
+    depends_on:
+      - core
+      - redis
