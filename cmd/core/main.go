@@ -8,6 +8,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	pb "github.com/mintrage/linkguard/proto" // Импортируем наш сгенерированный код
@@ -140,10 +142,21 @@ func main() {
 	// 4. Включаем рефлексию (чтобы мы могли тестировать сервер из консоли)
 	reflection.Register(grpcServer)
 
+	go func() {
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Printf("Ошибка сервера: %v", err)
+		}
+	}()
 	log.Println("🚀 Core gRPC сервер запущен на порту 50051...")
 
-	// 5. Запускаем бесконечный цикл прослушивания
-	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("Ошибка сервера: %v", err)
-	}
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Получен сигнал на остановку, начинаем Graceful Shutdown...")
+
+	grpcServer.GracefulStop()
+	rdb.Close()
+
+	log.Println("✅ Core успешно остановлен.")
+
 }
