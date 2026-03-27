@@ -6,7 +6,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	pb "github.com/mintrage/linkguard/proto"
@@ -127,8 +129,30 @@ func main() {
 
 	})
 
-	log.Println("🌐 API Gateway запущен на порту 8080...")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatalf("Ошибка запуска HTTP сервера: %v", err)
+	srv := &http.Server{
+		Addr:    ":8080",
+		Handler: nil,
 	}
+
+	go func() {
+		err := srv.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			log.Printf("Ошибка запуска HTTP сервера: %v", err)
+		}
+	}()
+	log.Println("🌐 API Gateway запущен на порту 8080...")
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("Получен сигнал на остановку, начинаем Graceful Shutdown...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatalf("Ошибка при мягком выключении: %v", err)
+	}
+	log.Println("✅ Gateway успешно остановлен.")
+
 }
