@@ -36,3 +36,14 @@ services:
     depends_on:
       - core
       - redis
+
+  tgbot:
+    build:
+      context: .
+      args:
+        - APP_PATH=cmd/tgbot/main.go
+    environment:
+      - TG_TOKEN=${TG_TOKEN}
+      - CORE_ADDR=core:50051
+    depends_on:
+      - core
