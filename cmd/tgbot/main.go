@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -12,8 +13,10 @@ import (
 	tele "gopkg.in/telebot.v3"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 func main() {
@@ -55,12 +58,15 @@ func main() {
 	})
 
 	b.Handle(tele.OnText, func(c tele.Context) error {
+		userText := c.Text()
+		matched, _ := regexp.MatchString(`^(https?://)?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(/.*)?$`, userText)
+		if !matched {
+			return c.Send("🤔 Это не похоже на правильную ссылку. Пожалуйста, отправь валидный URL (например, google.com)")
+		}
 
 		userID := strconv.FormatInt(c.Sender().ID, 10)
 		clientID := "tg_user:" + userID
 		ctx := metadata.AppendToOutgoingContext(context.Background(), "client_id", clientID)
-
-		userText := c.Text()
 
 		req := &pb.CreateLinkRequest{
 			OriginalUrl: userText,
@@ -69,7 +75,16 @@ func main() {
 		resp, err := grpcClient.CreateLink(ctx, req)
 
 		if err != nil {
-			return c.Send("Ошибка при сокращении")
+			if st, ok := status.FromError(err); ok {
+				if st.Code() == codes.ResourceExhausted {
+					return c.Send("⏳ Воу, полегче! Лимит запросов исчерпан. Подожди минутку.")
+				}
+				if st.Code() == codes.InvalidArgument {
+					return c.Send("⚠️ Ядро ругается: неверный формат ссылки.")
+				}
+			}
+			log.Printf("Неизвестная ошибка: %v", err)
+			return c.Send("❌ Упс, сервер сейчас недоступен. Попробуй позже.")
 		}
 
 		responseData := resp.GetShortLink()
