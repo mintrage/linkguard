@@ -19,8 +19,8 @@ services:
       args:
         APP_PATH: cmd/core/main.go
     ports:
-      - "50051:50051"
-      - "2112:2112"
+      - "127.0.0.1:50051:50051"
+      - "172.17.0.1:2112:2112"
     environment:
       - REDIS_ADDR=redis:6379
     depends_on:

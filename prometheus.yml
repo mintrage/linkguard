@@ -1,8 +1,12 @@
 global:
-  scrape_interval: 5s # Для тестов будем собирать данные каждые 5 секунд
+  scrape_interval: 15s # Для тестов будем собирать данные каждые 5 секунд
 
 scrape_configs:
   - job_name: 'linkguard-core'
     static_configs:
       # Обращаемся к localhost твоего компьютера изнутри Docker-контейнера
       - targets: ['core:2112']
+
+  - job_name: 'linkguard-gateway'
+    static_configs:
+      - targets: ['gateway:8080']
