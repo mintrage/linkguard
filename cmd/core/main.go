@@ -19,6 +19,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status" // Понадобится для тестирования
 )
@@ -99,6 +100,37 @@ func generateShortCode(length int) string {
 	return string(b)
 }
 
+func rateLimitInterceptor(rdb *redis.Client) grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		md, ok := metadata.FromIncomingContext(ctx)
+		if !ok {
+			// Если метаданных нет вообще, пропускаем или блокируем (лучше пропустить, чтобы не сломать тесты)
+			return handler(ctx, req)
+		}
+
+		// 2. Ищем наш заголовок client_id
+		clientIDs := md.Get("client_id")
+		if len(clientIDs) == 0 {
+			// Если ID не передали, просто пускаем дальше
+			return handler(ctx, req)
+		}
+		clientID := clientIDs[0]
+
+		key := "rate_limit:" + clientID
+		count, err := rdb.Incr(ctx, key).Result()
+		if err != nil {
+			log.Printf("Ошибка Rate Limiter: %v", err)
+		}
+		if count == 1 {
+			rdb.Expire(ctx, key, time.Minute).Err()
+		} else if count > 5 {
+			return nil, status.Errorf(codes.ResourceExhausted, "Превышен лимит запросов")
+		}
+
+		return handler(ctx, req)
+	}
+}
+
 func main() {
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
@@ -132,7 +164,9 @@ func main() {
 	}
 
 	// 2. Создаем инстанс gRPC-сервера
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(rateLimitInterceptor(rdb)),
+	)
 
 	// 3. Регистрируем нашу реализацию сервера в gRPC
 	pb.RegisterLinkServiceServer(grpcServer, &linkServer{

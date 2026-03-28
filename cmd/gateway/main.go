@@ -13,9 +13,9 @@ import (
 
 	pb "github.com/mintrage/linkguard/proto"
 
-	"github.com/redis/go-redis/v9"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 type CreateRequest struct {
@@ -23,20 +23,20 @@ type CreateRequest struct {
 }
 
 func main() {
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
-	}
-	rdb := redis.NewClient(&redis.Options{
-		Addr:     redisAddr,
-		Password: "",
-		DB:       0,
-	})
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
-		log.Fatalf("🚨 Ошибка подключения к Redis: %v. Проверь, запущен ли Docker контейнер!", err)
-		return
-	}
-	log.Println("✅ Успешно подключились к Redis!")
+	// redisAddr := os.Getenv("REDIS_ADDR")
+	// if redisAddr == "" {
+	// 	redisAddr = "localhost:6379"
+	// }
+	// rdb := redis.NewClient(&redis.Options{
+	// 	Addr:     redisAddr,
+	// 	Password: "",
+	// 	DB:       0,
+	// })
+	// if err := rdb.Ping(context.Background()).Err(); err != nil {
+	// 	log.Fatalf("🚨 Ошибка подключения к Redis: %v. Проверь, запущен ли Docker контейнер!", err)
+	// 	return
+	// }
+	// log.Println("✅ Успешно подключились к Redis!")
 
 	coreAddr := os.Getenv("CORE_ADDR")
 	if coreAddr == "" {
@@ -57,17 +57,19 @@ func main() {
 		}
 
 		userIP := strings.Split(r.RemoteAddr, ":")[0]
-		key := "rate_limit:" + userIP
-		count, err := rdb.Incr(r.Context(), key).Result()
-		if err != nil {
-			log.Printf("Ошибка Rate Limiter: %v", err)
-		}
-		if count == 1 {
-			rdb.Expire(r.Context(), key, time.Minute).Err()
-		} else if count > 5 {
-			http.Error(w, "Слишком много запросов", http.StatusTooManyRequests)
-			return
-		}
+		// key := "rate_limit:" + userIP
+		// count, err := rdb.Incr(r.Context(), key).Result()
+		// if err != nil {
+		// 	log.Printf("Ошибка Rate Limiter: %v", err)
+		// }
+		// if count == 1 {
+		// 	rdb.Expire(r.Context(), key, time.Minute).Err()
+		// } else if count > 5 {
+		// 	http.Error(w, "Слишком много запросов", http.StatusTooManyRequests)
+		// 	return
+		// }
+		clientID := "gateway_ip:" + userIP
+		ctx := metadata.AppendToOutgoingContext(r.Context(), "client_id", clientID)
 
 		var reqData CreateRequest
 
@@ -82,7 +84,7 @@ func main() {
 			OriginalUrl: reqData.URL,
 		}
 
-		resp, err := grpcClient.CreateLink(r.Context(), req)
+		resp, err := grpcClient.CreateLink(ctx, req)
 
 		if err != nil {
 			http.Error(w, "Ошибка создания ссылки", http.StatusInternalServerError)
@@ -108,6 +110,11 @@ func main() {
 			http.Error(w, "Только GET запросы", http.StatusMethodNotAllowed)
 			return
 		}
+
+		userIP := strings.Split(r.RemoteAddr, ":")[0]
+		clientID := userIP
+		ctx := metadata.AppendToOutgoingContext(r.Context(), "client_id", clientID)
+
 		shortCode := strings.TrimPrefix(r.URL.Path, "/")
 		if shortCode == "" {
 			http.Error(w, "Код не указан", http.StatusBadRequest)
@@ -118,7 +125,7 @@ func main() {
 			ShortLink: shortCode,
 		}
 
-		resp, err := grpcClient.GetOriginalLink(r.Context(), req)
+		resp, err := grpcClient.GetOriginalLink(ctx, req)
 
 		if err != nil {
 			http.Error(w, "Ссылка не найдена", http.StatusNotFound)

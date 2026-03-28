@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"time"
 
 	pb "github.com/mintrage/linkguard/proto"
@@ -12,6 +13,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
@@ -53,13 +55,18 @@ func main() {
 	})
 
 	b.Handle(tele.OnText, func(c tele.Context) error {
+
+		userID := strconv.FormatInt(c.Sender().ID, 10)
+		clientID := "tg_user:" + userID
+		ctx := metadata.AppendToOutgoingContext(context.Background(), "client_id", clientID)
+
 		userText := c.Text()
 
 		req := &pb.CreateLinkRequest{
 			OriginalUrl: userText,
 		}
 
-		resp, err := grpcClient.CreateLink(context.Background(), req)
+		resp, err := grpcClient.CreateLink(ctx, req)
 
 		if err != nil {
 			return c.Send("Ошибка при сокращении")
