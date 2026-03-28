@@ -24,6 +24,12 @@ func main() {
 	if tgToken == "" {
 		log.Fatalf("Токен не указан")
 	}
+
+	baseURL := os.Getenv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8080" // запасной вариант
+	}
+
 	coreAddr := os.Getenv("CORE_ADDR")
 	if coreAddr == "" {
 		coreAddr = "localhost:50051"
@@ -89,7 +95,7 @@ func main() {
 
 		responseData := resp.GetShortLink()
 
-		return c.Send(fmt.Sprintf("Твоя ссылка: http://localhost:8080/%s", responseData))
+		return c.Send(fmt.Sprintf("Твоя ссылка: %s/%s", baseURL, responseData))
 	})
 
 	log.Println("🤖 Telegram-бот запущен!")

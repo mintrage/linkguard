@@ -31,32 +31,31 @@ services:
       context: .
       args:
         APP_PATH: cmd/gateway/main.go # Передаем путь к шлюзу!
-    # ports:
-    #   - "8080:8080"
+    ports:
+      - "127.0.0.1:8085:8080"
     environment:
-      - REDIS_ADDR=redis:6379
       - CORE_ADDR=core:50051
     depends_on:
       - core
-      - redis
 
   tgbot:
     build:
       context: .
       args:
-        - APP_PATH=cmd/tgbot/main.go
+        APP_PATH: cmd/tgbot/main.go
     environment:
       - TG_TOKEN=${TG_TOKEN}
       - CORE_ADDR=core:50051
+      - BASE_URL=${BASE_URL}
     depends_on:
       - core
 
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80" # Открываем стандартный HTTP порт наружу
-    volumes:
-      # Прокидываем наш конфиг внутрь контейнера
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - gateway # Nginx должен стартовать после шлюза
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80" # Открываем стандартный HTTP порт наружу
+  #   volumes:
+  #     # Прокидываем наш конфиг внутрь контейнера
+  #     - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+  #   depends_on:
+  #     - gateway # Nginx должен стартовать после шлюза
